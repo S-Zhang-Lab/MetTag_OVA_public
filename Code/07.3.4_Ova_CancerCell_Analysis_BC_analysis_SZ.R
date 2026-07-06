@@ -11,6 +11,9 @@ library(viridis)
 
 Mets <- readRDS(file = "/Users/S208205/Library/CloudStorage/Box-Box/S.Zhang_Lab/UTSW_DATA/R02_EA/MetTag_BC_OVA/DATA/RDS/Mets_only_post_clusterGESA.rds")
 
+#set working directory for loading in raw data
+setwd("C:/Users/Zhang Lab/Desktop/Emma/R01_and_2_w_LARRY")
+
 # ===== BC overlay on clusters =======
 
 ## ===== START of Lib.ID and LARRY.BC freq plotting =============================
@@ -265,6 +268,22 @@ plot_ascmet_raw_ggplot
 
 ggsave(filename = "./Figures/Met_AscMet_LARRY_freq_table_heatmap_raw_ggplot.pdf",
        plot = plot_ascmet_raw_ggplot, width = 12, height = 2, units = "in")
+
+library(writexl)
+
+# 1. Package the pre-calculated raw count tables into a list
+# The names on the left will become your clean Excel tab names
+heatmap_source_data <- list(
+  "OmMet_LibID_RawCounts"   = OmMet_freq_table,
+  "AscMet_LibID_RawCounts"  = AscMet_freq_table,
+  "OmMet_LARRY_RawCounts"   = OmMet_LARRY_freq_table,
+  "AscMet_LARRY_RawCounts"  = AscMet_LARRY_freq_table
+)
+
+# 2. Export to a single Source Data Excel workbook
+write_xlsx(heatmap_source_data, "Source_Data_Barcode_Heatmaps.xlsx")
+
+print("Heatmap source data exported successfully!")
 
 ## ======== END of Lib.ID and LARRY.BC freq plotting ============================
 
@@ -1453,4 +1472,81 @@ object.i[["RNA"]] <- CreateAssayObject(counts = object.i[["RNA"]]$counts) #Conve
 SeuratDisk::SaveH5Seurat(object.i, filename = "/Users/S208205/Library/CloudStorage/Box-Box/S.Zhang_Lab/UTSW_DATA/R02_EA/MetTag_BC_OVA/DATA/Looms/Mets.h5Seurat", overwrite = TRUE)
 SeuratDisk::Convert("/Users/S208205/Library/CloudStorage/Box-Box/S.Zhang_Lab/UTSW_DATA/R02_EA/MetTag_BC_OVA/DATA/Looms/Mets.h5Seurat", dest = "h5ad", overwrite = TRUE)
 
+# 1. Unique clones in Omental Metastasis
+om_unique_bcs <- length(unique(OmMet@meta.data$Combined.LARRY_group[
+  !grepl("not_detected|ratio_less", OmMet@meta.data$Combined.LARRY_group)
+]))
 
+# 2. Unique clones in Ascites
+asc_unique_bcs <- length(unique(AscMet@meta.data$Combined.LARRY_group[
+  !grepl("not_detected|ratio_less", AscMet@meta.data$Combined.LARRY_group)
+]))
+
+# 3. Overlap between the two (Clonal Divergence proof)
+overlap_bcs <- intersect(
+  unique(OmMet@meta.data$Combined.LARRY_group[!grepl("not_detected|ratio_less", OmMet@meta.data$Combined.LARRY_group)]),
+  unique(AscMet@meta.data$Combined.LARRY_group[!grepl("not_detected|ratio_less", AscMet@meta.data$Combined.LARRY_group)])
+)
+
+# 1. Extract raw barcode vectors
+om_raw <- as.character(OmMet@meta.data$Combined.LARRY_group)
+asc_raw <- as.character(AscMet@meta.data$Combined.LARRY_group)
+
+# 2. Filter for actual BCs and strip suffixes
+# This removes "-om" or "-asc" from any string that contains them
+om_clean <- unique(gsub("-om$|-asc$", "", om_raw[startsWith(om_raw, "BC-")]))
+asc_clean <- unique(gsub("-asc$|-om$", "", asc_raw[startsWith(asc_raw, "BC-")]))
+
+# 3. Calculate True Biological Overlap
+shared_clones <- intersect(om_clean, asc_clean)
+
+# 4. Compile the Summary
+final_summary <- data.frame(
+  Metric = c("Unique Clones in Omentum", 
+             "Unique Clones in Ascites", 
+             "Shared Clones (Overlap)",
+             "Total Unique Metastatic Clones"),
+  Count = c(length(om_clean), 
+            length(asc_clean), 
+            length(shared_clones),
+            length(union(om_clean, asc_clean)))
+)
+
+# 5. Export to CSV
+write.csv(final_summary, file = "Final_Clonal_Overlap_Summary.csv", row.names = FALSE)
+
+# 6. List the Shared Names (just to be sure)
+print("Names of Shared Clones:")
+print(shared_clones)
+
+print("Summary Table:")
+print(final_summary)
+
+### EXPORT SOURCE DATA
+library(dplyr)
+library(tidyr)
+library(writexl)
+
+# 1. Subset to the top 3 clones (just in case 'subset_cells' isn't in your current environment)
+subset_cells <- subset(Mets, Combined.LARRY_group %in% c("BC-4-om", "BC-49-om", "BC-1-om"))
+
+# 2. Extract the raw frequency table
+raw_table <- as.data.frame(table(subset_cells$Combined.LARRY_group, subset_cells$seurat_clusters))
+colnames(raw_table) <- c("Barcode", "Seurat_Clust", "Frequency")
+
+# 3. Pivot the table to match your exact Figure 2I Excel template
+fig2i_source_data <- raw_table %>%
+  # Keep only the clusters shown in your figure legend
+  filter(Seurat_Clust %in% c("0", "1", "2", "4")) %>%
+  # Spread the barcodes across the columns
+  pivot_wider(names_from = Barcode, values_from = Frequency, values_fill = 0) %>%
+  # Arrange columns to match the left-to-right order in your bar chart
+  select(Seurat_Clust, `BC-4-om`, `BC-49-om`, `BC-1-om`) %>%
+  # Sort rows chronologically by cluster
+  arrange(Seurat_Clust)
+
+# 4. Export the final source data
+write_xlsx(list("Figure_2I_Frequencies" = fig2i_source_data), "Source_Data_Figure2I_ClusterDist.xlsx")
+
+print("Figure 2I source data exported successfully!")
+print(fig2i_source_data)

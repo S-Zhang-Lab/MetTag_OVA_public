@@ -37,6 +37,8 @@ head(DEG_Trem2)
 
 ### Repeat the same procedure for Gbp high vs Gbp low cells
 DEG_Gbp2b <- read.csv("DEG_Gbp2bHigh_vs_Low.csv", header = TRUE, stringsAsFactors = FALSE)
+DEG_Macs <- read.csv("DEG_Macs_All_Om_vs_Asc.csv", header = TRUE, stringsAsFactors = FALSE)
+DEG_Macs <- DEG_Macs %>% rename(gene = X)
 
 ### GSEA Preparation #####
 # Sort by log fold change to get up-regulated and down-regulated genes
@@ -55,10 +57,15 @@ upregulated_genes_AM <- DEG_Macs %>%
   arrange(desc(avg_log2FC)) %>%
   head(300)
 
+upregulated_genes_OM <- DEG_Macs %>%
+  filter(avg_log2FC > 0, p_val_adj < 0.05) %>%  # Added p-value filtering
+  arrange(desc(avg_log2FC)) %>%
+  head(300)
+
 upregulated_genes_T <- DEG_Trem2 %>%
   filter(avg_log2FC > 0, p_val_adj < 0.05) %>%
   arrange(desc(avg_log2FC)) %>%
-  head(300)
+  head(200)
 
 downregulated_genes_T <- DEG_Trem2 %>%
   filter(avg_log2FC < 0, p_val_adj < 0.05) %>%
@@ -84,6 +91,8 @@ AscMet_up$gene <- rownames(downregulated_genes)
 
 Trem2_up <- upregulated_genes_T
 Trem2_up$gene <- rownames(upregulated_genes_T)
+Trem2_down <- downregulated_genes_T
+Trem2_down$gene <- rownames(downregulated_genes_T)
 
 TNK_up <- upregulated_genes_TNK
 TNK_up$gene <- rownames(upregulated_genes_TNK)
@@ -91,8 +100,16 @@ TNK_up$gene <- rownames(upregulated_genes_TNK)
 Asc_TNK_up <- downregulated_genes_TNK
 Asc_TNK_up$gene <- rownames(downregulated_genes_TNK)
 
-Asc_mac_up <- upregulated_genes_AM
-Asc_mac_up$gene <- rownames(upregulated_genes_AM)
+Om_mac_up_genes <- upregulated_genes_OM
+Om_mac_up_genes$gene <- rownames(upregulated_genes_OM)
+
+Asc_mac_up_genes <- upregulated_genes_AM
+Asc_mac_up_genes$gene <- rownames(upregulated_genes_AM)
+
+# OR Extract gene symbols directly if formatting not the same
+Asc_mac_up_genes <- upregulated_genes_AM$gene
+Om_mac_up_genes  <- upregulated_genes_OM$gene
+
 
 # Validate symbols and convert to Entrez IDs
 valid_symbols <- keys(org.Mm.eg.db, keytype = "SYMBOL")
@@ -105,13 +122,20 @@ filtered_AscMet <- intersect(AscMet_up$gene, valid_symbols)
 entrez_ids_AscMet <- bitr(filtered_AscMet, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
 entrez_AscMet <- na.omit(entrez_ids_AscMet$ENTREZID)
 
-filtered_Asc_mac_up <- intersect(Asc_mac_up$gene, valid_symbols)
-entrez_ids_Asc_mac_up <- bitr(filtered_Asc_mac_up, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
-entrez_Asc_mac_up <- na.omit(entrez_ids_Asc_mac_up$ENTREZID)
+# Convert to Entrez IDs
+filtered_Asc_mac <- intersect(Asc_mac_up_genes$gene, valid_symbols)
+entrez_ids_Asc <- bitr(filtered_Asc_mac, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+filtered_Om_mac <- intersect(Om_mac_up_genes$gene, valid_symbols)
+entrez_ids_Om  <- bitr(filtered_Om_mac,  fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+entrez_Asc_ids <- na.omit(entrez_ids_Asc$ENTREZID)
+entrez_Om_ids  <- na.omit(entrez_ids_Om$ENTREZID)
 
 filtered_Trem2 <- intersect(Trem2_up$gene, valid_symbols)
+filtered_Trem2_neg <- intersect(Trem2_down$gene, valid_symbols)
 entrez_ids_Trem2 <- bitr(filtered_Trem2, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+entrez_ids_Trem2_neg <- bitr(filtered_Trem2_neg, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
 entrez_Trem2 <- na.omit(entrez_ids_Trem2$ENTREZID)
+entrez_Trem2_neg <- na.omit(entrez_ids_Trem2_neg$ENTREZID)
 
 filtered_TNK <- intersect(TNK_up$gene, valid_symbols)
 entrez_ids_TNK <- bitr(filtered_TNK, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
@@ -165,6 +189,17 @@ Trem2_up_go_bp <- enrichGO(
   qvalueCutoff = 0.05
 )
 dotplot(Trem2_up_go_bp, showCategory = 10, title = "Top GO Biological Processes Pathways (Trem2)")
+
+Trem2_down_go_bp <- enrichGO(
+  gene = entrez_Trem2_neg,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "BP",  # Biological Process
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+dotplot(Trem2_down_go_bp, showCategory = 10, title = "Top GO Biological Processes Pathways (Trem2 Neg)")
 
 TNK_up_go_bp <- enrichGO(
   gene = entrez_TNK,
@@ -222,6 +257,17 @@ Trem2_up_go_mf <- enrichGO(
 )
 dotplot(Trem2_up_go_mf, showCategory = 10, title = "Top GO Molecular Function Pathways (Trem2)")
 
+Trem2_down_go_mf <- enrichGO(
+  gene = entrez_Trem2_neg,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID",
+  ont = "MF",  # Molecular Function
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+dotplot(Trem2_down_go_mf, showCategory = 10, title = "Top GO Molecular Function Pathways (Trem2 Neg)")
+
 TNK_up_go_mf <- enrichGO(
   gene = entrez_TNK,
   OrgDb = org.Mm.eg.db,
@@ -270,6 +316,15 @@ Trem2_up_kegg <- enrichKEGG(
 )
 dotplot(Trem2_up_kegg, showCategory = 10, title = "Top KEGG Pathways (Trem2)")
 
+Trem2_down_kegg <- enrichKEGG(
+  gene = entrez_Trem2_neg,
+  organism = "mmu",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+dotplot(Trem2_down_kegg, showCategory = 10, title = "Top KEGG Pathways (Trem2 Neg)")
+
 TNK_up_kegg <- enrichKEGG(
   gene = entrez_TNK,
   organism = "mmu",
@@ -299,13 +354,22 @@ AscMet_up_reactome <- enrichPathway(
 dotplot(AscMet_up_reactome, showCategory = 10, title = "Top Reactome Pathways (AscMet)")
 
 Asc_mac_up_reactome <- enrichPathway(
-  gene = entrez_Asc_mac_up,
+  gene = entrez_Asc_ids,
   organism = "mouse",
   pAdjustMethod = "BH",
   pvalueCutoff = 0.05,
   qvalueCutoff = 0.05
 )
 dotplot(Asc_mac_up_reactome, showCategory = 10, title = "Top Reactome Pathways (Asc MAC)")
+
+Om_mac_up_reactome <- enrichPathway(
+  gene = entrez_Om_ids,
+  organism = "mouse",
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+dotplot(Om_mac_up_reactome, showCategory = 10, title = "Top Reactome Pathways (Om MAC)")
 
 Trem2_up_reactome <- enrichPathway(
   gene = entrez_Trem2,
@@ -340,8 +404,17 @@ hallmark_df <- msigdbr(species = "Mus musculus", category = "H") %>%
 AscMet_up_genes <- bitr(entrez_AscMet, fromType = "ENTREZID", 
                         toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
 
-Asc_mac_up_genes <- bitr(entrez_Asc_mac_up, fromType = "ENTREZID", 
+Asc_mac_up_genes <- bitr(entrez_Asc_ids, fromType = "ENTREZID", 
                         toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
+
+Om_mac_up_genes <- bitr(entrez_Om_ids, fromType = "ENTREZID", 
+                         toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
+
+Trem2_mac_up_genes <- bitr(entrez_Trem2, fromType = "ENTREZID", 
+                        toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
+
+Trem2_mac_down_genes <- bitr(entrez_Trem2_neg, fromType = "ENTREZID", 
+                           toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
 
 # 3. Run enrichment analysis with SYMBOLs
 AscMet_up_hallmark <- enricher(
@@ -360,8 +433,19 @@ Asc_mac_up_hallmark <- enricher(
   qvalueCutoff = 0.05
 )
 
+Om_mac_up_hallmark <- enricher(
+  gene = Om_mac_up_genes,
+  TERM2GENE = hallmark_df,
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+
+
 # 4. Plot the top pathways
 dotplot(Asc_mac_up_hallmark, showCategory = 10, title = "Top Hallmark Pathways (Asc MAC)")
+
+dotplot(Om_mac_up_hallmark, showCategory = 10, title = "Top Hallmark Pathways (Om MAC)")
 
 OmMet_up_genes <- bitr(entrez_OmMet, fromType = "ENTREZID", 
                         toType = "SYMBOL", OrgDb = org.Mm.eg.db)$SYMBOL
@@ -375,3 +459,27 @@ OmMet_up_hallmark <- enricher(
 
 # 4. Plot the top pathways
 dotplot(OmMet_up_hallmark, showCategory = 10, title = "Top Hallmark Pathways (OmMet)")
+
+Trem2_mac_up_hallmark <- enricher(
+  gene = Trem2_mac_up_genes,
+  TERM2GENE = hallmark_df,
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+
+# 4. Plot the top pathways
+dotplot(Trem2_mac_up_hallmark, showCategory = 10, title = "Top Hallmark Pathways (Trem2)")
+
+Trem2_mac_down_hallmark <- enricher(
+  gene = Trem2_mac_down_genes,
+  TERM2GENE = hallmark_df,
+  pAdjustMethod = "BH",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.05
+)
+
+# 4. Plot the top pathways
+dotplot(Trem2_mac_down_hallmark, showCategory = 10, title = "Top Hallmark Pathways (Trem2 neg)")
+
+

@@ -44,12 +44,16 @@ ligand_target_matrix = ligand_target_matrix %>% .[!is.na(rownames(ligand_target_
 head(weighted_networks$lr_sig)
 head(weighted_networks$gr) # interactions and their weights in the gene regulatory network
 
-# Define receiver cells - cancer
+# Define receiver cells - cancer >> later changed to T cell
 # Subset the Seurat object to focus on Myeloid sender cells
 
 ### Define sender and receiver cells
 Idents(seuratObj) <- "Broad_cell.ID"
 receiver <- "ID8.Tumor"
+sender_celltypes <- c("Myeloid")
+
+Idents(seuratObj) <- "Broad_cell.ID"
+receiver <- "T/NK.cell"
 sender_celltypes <- c("Myeloid")
 
 expressed_genes_receiver <- get_expressed_genes(receiver, seuratObj, pct = 0.05)
@@ -64,6 +68,10 @@ potential_ligands_focused <- intersect(potential_ligands, expressed_genes_sender
 ### Define gene sets of interest to compare - AscMet vs OmMet
 condition_oi <- "asc:1_AscMet"
 condition_reference <- "om:2_OmMet"
+
+### For T cell reciever change the order of these
+condition_oi <- "om:2_OmMet"
+condition_reference <- "asc:1_AscMet"
 
 seurat_obj_receiver <- subset(seuratObj, idents = receiver)
 seurat_obj_receiver <- PrepSCTFindMarkers(seurat_obj_receiver)
@@ -151,12 +159,11 @@ order_ligands_receptor <- hclust_ligands$labels[hclust_ligands$order]
 
 order_receptors <- order_receptors %>% intersect(rownames(lr_network_top_matrix))
 order_ligands_receptor <- order_ligands_receptor %>% intersect(colnames(lr_network_top_matrix))
-
 vis_ligand_receptor_network <- lr_network_top_matrix[order_receptors, order_ligands_receptor]
 rownames(vis_ligand_receptor_network) <- order_receptors %>% make.names()
 colnames(vis_ligand_receptor_network) <- order_ligands_receptor %>% make.names()
 
-p_ligand_receptor_network <- vis_ligand_receptor_network %>% t() %>% make_heatmap_ggplot("Ligands", "Receptors", color = "darkred", x_axis_position = "top", legend_title = "Prior interaction potential")
+p_ligand_receptor_network <- vis_ligand_receptor_network %>% t() %>% make_heatmap_ggplot("Ligands", "Receptors", color = "purple", x_axis_position = "top", legend_title = "Prior interaction potential")
 p_ligand_receptor_network
 
 
@@ -164,7 +171,7 @@ p_ligand_receptor_network
 ligand_activities %>%
   top_n(20, aupr_corrected) %>%
   ggplot(aes(x = reorder(test_ligand, aupr_corrected), y = aupr_corrected)) +
-  geom_col(fill = "darkred") +
+  geom_col(fill = "purple") +
   coord_flip() +
   labs(x = "Ligand", y = "AUPR Score", title = "Top ligands ranked by activity") +
   theme_minimal()
@@ -186,7 +193,15 @@ VlnPlot(seuratObj, features = best_upstream_ligands, group.by = "Combined.HTO_gr
 #DotPlot for ligand expression 
 DotPlot(seuratObj, features = best_upstream_ligands, group.by = "Broad_cell.ID") +
   RotatedAxis() +
-  ggtitle("Ligand expression in macrophages")
+  ggtitle("Ligand expression in myeloids")
+
+best_upstream_ligands_mouse <- best_upstream_ligands
+write.csv(best_upstream_ligands_mouse, "top30_mouse_ligands.csv", row.names = FALSE)
+# Get expressed genes in sender cell types (mouse)
+expressed_genes_sender_mouse <- unique(unlist(lapply(sender_celltypes, get_expressed_genes, seuratObj, 0.05)))
+
+robust_ligands_mouse <- intersect(best_upstream_ligands_mouse, expressed_genes_sender_mouse)
+write.csv(robust_ligands_mouse, "robust_mouse_ligands_expressed.csv", row.names = FALSE)
 
 library(clusterProfiler)
 library(org.Mm.eg.db)  # Mouse annotation package
@@ -201,18 +216,18 @@ top_ligand_targets <- active_ligand_target_links_df %>%
   pull(target) %>%       # Extract the target genes
   unique()               # Keep unique targets only
 
-# Run GO enrichment on these predicted target genes
+# Run GO enrichment on these predicted target genes - do both BP and MF
 ego_targets <- enrichGO(gene = top_ligand_targets,
                         OrgDb = org.Mm.eg.db,
                         keyType = "SYMBOL",
-                        ont = "MF",
+                        ont = "BP",
                         pAdjustMethod = "BH",
                         qvalueCutoff = 0.05,
                         readable = TRUE)
 
 # Visualize top enriched GO terms
 dotplot(ego_targets, showCategory = 10) + 
-  ggtitle("GOMF enrichment of predicted target genes")
+  ggtitle("GOBP enrichment of predicted target genes")
 
 ### VENN DIAGRAM OF HUMAN & MOUSE INTERSECTION
 
@@ -221,31 +236,36 @@ best_upstream_receptors_mouse <- best_upstream_receptors
 expressed_genes_sender_mouse <- expressed_genes_sender
 robust_ligands_mouse <- intersect(best_upstream_ligands_mouse, expressed_genes_sender_mouse)
 
+# repeat with human once finished with that analysis
 best_upstream_ligands_human <- best_upstream_ligands
 best_upstream_receptors_human <- best_upstream_receptors
 expressed_genes_sender_human <- expressed_genes_sender
 robust_ligands_human <- intersect(best_upstream_ligands_human, expressed_genes_sender_human)
 
 mouse_to_human <- c(
-  Bst2 = "BST2",
-  Ccl12 = "CCL2",
-  Cd14 = "CD14",
-  Cd48 = "CD48",
-  Csf1 = "CSF1",
-  Edil3 = "EDIL3",
-  Ifitm6 = "IFITM3",
-  Il10 = "IL10",
-  Il1b = "IL1B",
-  Il1rn = "IL1RN",
-  Il27 = "IL27",
-  Jam2 = "JAM2",
-  Ocln = "OCLN",
-  Selp = "SELP",
-  Tgfb1 = "TGFB1",
-  Tnf = "TNF"
+  "Tnf" = "TNF",
+  "Jam2" = "JAM2",
+  "Il10" = "IL10",
+  "Selp" = "SELP",
+  "Ccl12" = "CCL2",    # Note: Ccl12 maps to CCL2 in human
+  "Bst2" = "BST2",
+  "Ocln" = "OCLN",
+  "Ifitm6" = "IFITM1", # Closest ortholog
+  "Il1b" = "IL1B",
+  "Cd14" = "CD14",
+  "Csf1" = "CSF1",
+  "Tgfb1" = "TGFB1",
+  "Cd48" = "CD48",
+  "Il1rn" = "IL1RN",
+  "Il27" = "IL27",
+  "Edil3" = "EDIL3"
 )
 
+# Example usage:
+robust_ligands_mouse <- c("Tnf", "Jam2", "Il10", "Selp", "Ccl12", "Bst2", "Ocln", "Ifitm6", "Il1b", "Cd14", "Csf1", "Tgfb1", "Cd48", "Il1rn", "Il27", "Edil3")
 robust_ligands_mouse <- mouse_to_human[robust_ligands_mouse]
+print(robust_ligands_mouse)
+
 
 shared_ligands <- intersect(robust_ligands_human, robust_ligands_mouse)
 
