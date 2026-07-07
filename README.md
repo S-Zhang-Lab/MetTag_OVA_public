@@ -2,6 +2,8 @@
 
 <img src="/assets/images/Logo_OVA.png" width="180" height="220"/>
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21245349.svg)](https://doi.org/10.5281/zenodo.21245349)
+
 This is a sub-repo for under MetTag project. We keep the ovarian cancer MetTag tracing data analysis here. The overall data analysis pipeline is similar to MetTag LARRY lung metastasis data, with some minor optimization of reprocessing and barcodes calling along with other improvements.
 
 ## 1. Experimental design
@@ -105,3 +107,13 @@ We used cellranger count to count transcriptome and CITE(HTO).
 **Step 6.1** The final output files (sparse matrix) can be loaded a separate "Assay" to the Seurat obj using L1 [LARRY and Lib_ID assignment in R](/Code/06.1_AssignLARRY_L1.R) code and [similar code for R2](/Code/06.1_AssignLARRY_L2.R).
 
 **Step 6.2** Consolidate L1 and L2 using the [R code](/Code/06.2_ConsolidatedMeta_L1_L2.R). The SCT integrated obj is used for downstream analysis in Seurat.
+
+## 4. Processed data and RNA velocity inputs
+
+Raw sequencing data are on GEO (GSE302619, see Section 2). Processed, analysis-ready objects that support the figures in this repo — too large for GitHub — are archived on Zenodo:
+
+**[10.5281/zenodo.21245349](https://doi.org/10.5281/zenodo.21245349)** (CC-BY 4.0)
+
+-   `MetTag.Ova_merged_SCT_with_clustermarker.rds` — final integrated, SCT-normalized, cluster-annotated Seurat object (all cells, L1+L2)
+-   `Mets_only_post_clusterGESA_with_expansion_06-04-25.rds` — tumor/metastatic-cell subset with MetTag LARRY clonal-expansion metadata, used by [07.3.4](/Code/07.3.4_Ova_CancerCell_Analysis_BC_analysis_SZ.R), [10_SF_GOplus](/Code/10_SF_GOplus.R), [12_IFNg_Scoring](/Code/12_IFNg_Scoring.R), and [13.3_CellCycle_Regression](/Code/13.3_CellCycle_Regression.R)
+-   `R02_EA_L1_LARRYreseq.loom` / `R02_EA_L2_LARRYreseq.loom` — velocyto spliced/unspliced count looms, input to the scVelo/CellRank RNA velocity analysis ([13.1](/Code/13.1_Subset_MergeLoom_scVelo.html), [13.2](/Code/13.2_scVelo_integrated_Mets.py), [Mets_CellRank2.ipynb](/Code/Cellrank/Mets_CellRank2.ipynb))
